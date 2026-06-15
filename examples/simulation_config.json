@@ -1,0 +1,62 @@
+{
+    "mesh_file": "examples/roadbed_mesh.msh",
+    "output_dir": "./vtk_output",
+    "log_file": "simulation.log",
+    "mean_annual_temp_K": 270.15,
+    "temp_amplitude_K": 20.0,
+    "period_days": 365.0,
+    "phase_shift_days": 15.0,
+    "initial_surface_temp_K": 278.15,
+    "geothermal_gradient": 0.025,
+    "total_time_s": 3154000.0,
+    "time_step_s": 3600.0,
+    "output_interval_steps": 24,
+    "max_iterations": 50,
+    "tolerance": 1e-06,
+    "use_direct_solver": true,
+    "bottom_temp_K": 280.15,
+    "damage_threshold": 0.5,
+    "block_size": 1000,
+    "enable_block_loading": true,
+    "zones": {
+        "0": {
+            "water_content": 0.25,
+            "frost_heave_coeff": 0.09,
+            "permeability": 1e-8,
+            "thermal_cond_frozen": 2.2,
+            "thermal_cond_unfrozen": 1.8,
+            "heat_cap_frozen": 1800,
+            "heat_cap_unfrozen": 2200,
+            "density": 1800,
+            "young_modulus": 3e7,
+            "poisson_ratio": 0.35,
+            "porosity": 0.40
+        },
+        "1": {
+            "water_content": 0.30,
+            "frost_heave_coeff": 0.09,
+            "permeability": 1e-8,
+            "thermal_cond_frozen": 2.0,
+            "thermal_cond_unfrozen": 1.6,
+            "heat_cap_frozen": 1850,
+            "heat_cap_unfrozen": 2250,
+            "density": 1900,
+            "young_modulus": 5e7,
+            "poisson_ratio": 0.33,
+            "porosity": 0.38
+        },
+        "2": {
+            "water_content": 0.20,
+            "frost_heave_coeff": 0.09,
+            "permeability": 1e-9,
+            "thermal_cond_frozen": 2.4,
+            "thermal_cond_unfrozen": 2.0,
+            "heat_cap_frozen": 1750,
+            "heat_cap_unfrozen": 2150,
+            "density": 1950,
+            "young_modulus": 8e7,
+            "poisson_ratio": 0.30,
+            "porosity": 0.35
+        }
+    }
+}
