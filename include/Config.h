@@ -44,6 +44,20 @@ struct SimulationConfig {
     Index blockSize = 1000;
     bool enableBlockLoading = true;
 
+    bool enableTrafficCoupling = false;
+    Scalar vehicleSpeedKmh = 60.0;
+    Scalar truckCount = 50;
+    Scalar lightCarCount = 200;
+    std::vector<Scalar> laneCenterXs = {0.0, 3.5};
+    Scalar AADT_perLane = 20000;
+    Scalar truckPercent = 15.0;
+    Scalar loadFrequencyHz = 10.0;
+    bool useBZZ100Standard = true;
+    Scalar startTime_s = 0.0;
+    Scalar trafficDuration_s = 86400.0;
+    Scalar headway_s = 6.0;
+    Scalar surfaceElevation = 0.0;
+
     std::map<Index, ZoneProperties> customZones;
     std::vector<std::tuple<Scalar, Scalar, Scalar, Scalar, Index, ZoneProperties>> zoneRanges;
 };

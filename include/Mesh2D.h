@@ -58,6 +58,14 @@ public:
     void setZonePropertyByRange(Scalar xMin, Scalar xMax, Scalar yMin, Scalar yMax,
                                 Index zoneId, const ZoneProperties& props);
 
+    void setNodes(const std::vector<Node2D>& nodes) { nodes_ = nodes; updateBoundingBox(); }
+    void setElements(const std::vector<TriElement>& elements) { elements_ = elements; }
+    void recomputeAll() {
+        computeElementAreas();
+        computeNodeNeighbors();
+        updateBoundingBox();
+    }
+
 private:
     void updateBoundingBox();
     void parseMeshNode(std::istream& is);

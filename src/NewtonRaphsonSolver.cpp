@@ -24,6 +24,10 @@ void NewtonRaphsonSolver::setInitialConditions(const VectorX& temp0,
     current_.stressXY = VectorX::Zero(N);
     previous_ = current_;
     increment_ = current_;
+
+    vehiclePosField_ = VectorX::Zero(N);
+    wheelPressField_ = VectorX::Zero(N);
+    cachedNodalLoad_ = VectorX::Zero(4 * N);
 }
 
 void NewtonRaphsonSolver::packStateVector(const VectorX& T, const VectorX& W,
@@ -71,6 +75,20 @@ SolverResult NewtonRaphsonSolver::solveNonlinearStep(Scalar currentTime) {
     Index N = mesh_.getNumNodes();
     Index totalDofs = 4 * N;
 
+    if (trafficCouplingEnabled_ && vehicleLoad_) {
+        cachedNodalLoad_ = vehicleLoad_->assembleNodalLoadVector(currentTime);
+        vehiclePosField_ = vehicleLoad_->computeVehiclePositionField(currentTime);
+        wheelPressField_ = vehicleLoad_->computeWheelPressureField(currentTime);
+        Scalar totalForce = vehicleLoad_->estimateTotalTrafficForce(currentTime);
+        trafficForceHistory_.push_back(totalForce);
+        vehicleLoad_->recordStep(static_cast<Index>(trafficForceHistory_.size() - 1),
+                                   currentTime);
+        if (vehicleFieldCallback_) {
+            vehicleFieldCallback_(static_cast<Index>(trafficForceHistory_.size() - 1),
+                                  vehiclePosField_, wheelPressField_);
+        }
+    }
+
     VectorX state, statePrev;
     packStateVector(current_.temperature, current_.waterContent,
                     current_.displaceX, current_.displaceY, state);
@@ -97,6 +115,11 @@ SolverResult NewtonRaphsonSolver::solveNonlinearStep(Scalar currentTime) {
                                            Wk, previous_.waterContent,
                                            dispFlat, VectorX::Zero(2 * N),
                                            dt_, R);
+
+        if (trafficCouplingEnabled_ && cachedNodalLoad_.size() == totalDofs) {
+            assembler_.addVehicleNodalLoad(R, cachedNodalLoad_);
+        }
+
         assembler_.applyBCToJacobian(J, R, bcs_, currentTime);
 
         residualNorm = R.norm();

@@ -82,6 +82,30 @@ public:
     void computeBMatrix(Index elemId, Eigen::Matrix<Scalar, 3, 6>& B) const;
     void computeDMatrix(Scalar E, Scalar nu, Eigen::Matrix<Scalar, 3, 3>& D) const;
 
+    void addVehicleNodalLoad(VectorX& F, const VectorX& vehicleLoad) const;
+    void assembleCoupledResidualWithVehicle(const VectorX& temp,
+                                             const VectorX& tempPrev,
+                                             const VectorX& water,
+                                             const VectorX& waterPrev,
+                                             const VectorX& dispPrev,
+                                             const VectorX& dispIncr,
+                                             const VectorX& vehicleLoad,
+                                             Scalar dt,
+                                             VectorX& R);
+
+    Scalar computeElementDynamicModulus(Index elemId, Scalar temperature,
+                                         Scalar iceContent,
+                                         Scalar staticE,
+                                         Scalar loadFrequencyHz = 10.0) const;
+
+    void assembleMechanicalWithDynamic(const VectorX& tempPrev,
+                                        const VectorX& waterPrev,
+                                        const VectorX& iceContent,
+                                        const VectorX& dispPrev,
+                                        Scalar dt,
+                                        Scalar loadFrequency,
+                                        SparseMatrixX& K, VectorX& F);
+
 #ifdef USE_BLOCK_LOADING
     void assembleThermalBlock(const VectorX& tempPrev,
                               const VectorX& waterPrev,

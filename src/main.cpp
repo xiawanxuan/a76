@@ -173,6 +173,49 @@ int main(int argc, char* argv[]) {
         solver.setOutputInterval(cfg.outputInterval);
         solver.useDirectSolver(cfg.useDirectSolver);
 
+        std::shared_ptr<VehicleLoad> vehicleLoad;
+        Index totalVehicleCount = 0;
+        if (cfg.enableTrafficCoupling) {
+            vehicleLoad = std::make_shared<VehicleLoad>(mesh);
+            Scalar startT = cfg.startTime_s;
+            Scalar endT = startT + cfg.trafficDuration_s;
+            Scalar headway = std::max(0.1, cfg.headway_s);
+
+            for (size_t li = 0; li < cfg.laneCenterXs.size(); ++li) {
+                Scalar laneX = cfg.laneCenterXs[li];
+
+                if (cfg.useBZZ100Standard) {
+                    Index numTrucks = static_cast<Index>(std::max(1.0, cfg.truckCount / std::max(1.0, static_cast<Scalar>(cfg.laneCenterXs.size()))));
+                    totalVehicleCount += vehicleLoad->addVehicleStream(
+                        VehicleClass::HeavyTruckBZZ100,
+                        cfg.vehicleSpeedKmh, laneX,
+                        startT, endT, headway, numTrucks);
+
+                    Index numCars = static_cast<Index>(cfg.lightCarCount / std::max(1.0, static_cast<Scalar>(cfg.laneCenterXs.size())));
+                    totalVehicleCount += vehicleLoad->addVehicleStream(
+                        VehicleClass::LightCar,
+                        cfg.vehicleSpeedKmh + 20.0, laneX + 1.75,
+                        startT, endT, headway * 0.5, numCars);
+                } else {
+                    totalVehicleCount += vehicleLoad->addVehicleStreamByAADT(
+                        VehicleClass::HeavyTruckBZZ100, cfg.vehicleSpeedKmh,
+                        laneX, cfg.AADT_perLane, startT, cfg.truckPercent,
+                        static_cast<Index>(cfg.truckCount / std::max(1.0, static_cast<Scalar>(cfg.laneCenterXs.size()))));
+
+                    totalVehicleCount += vehicleLoad->addVehicleStreamByAADT(
+                        VehicleClass::LightCar, cfg.vehicleSpeedKmh + 20.0,
+                        laneX + 1.75, cfg.AADT_perLane, startT, 100.0 - cfg.truckPercent,
+                        static_cast<Index>(cfg.lightCarCount / std::max(1.0, static_cast<Scalar>(cfg.laneCenterXs.size()))));
+                }
+            }
+
+            solver.enableTrafficCoupling(true);
+            solver.setVehicleLoad(vehicleLoad);
+            solver.setDynamicLoadFrequency(cfg.loadFrequencyHz);
+            logMessage("车辆动载耦合启用: 共生成 " + std::to_string(totalVehicleCount) +
+                       " 辆车, 覆盖 " + std::to_string(cfg.laneCenterXs.size()) + " 车道");
+        }
+
         auto bcs = buildBoundaryConditions(mesh, thermoHydro, cfg);
         solver.setBoundaryConditions(bcs);
         logMessage("边界条件设置完成: 共 " + std::to_string(bcs.size()) + " 组");
@@ -215,16 +258,29 @@ int main(int argc, char* argv[]) {
                     damage = damageHist.back();
                 }
 
-                writer.writeStep(outputStep, t, fields, damage);
+                VectorX vehiclePos = solver.hasVehicleLoad()
+                    ? solver.getVehiclePositionField() : VectorX::Zero(mesh.getNumNodes());
+                VectorX wheelPress = solver.hasVehicleLoad()
+                    ? solver.getWheelPressureField() : VectorX::Zero(mesh.getNumNodes());
+
+                writer.writeStep(outputStep, t, fields, damage,
+                                 vehiclePos, wheelPress);
 
                 Scalar settle = solver.getSettlementHistory().empty()
                     ? 0.0 : solver.getSettlementHistory().back();
 
+                Scalar trafficForce = solver.hasVehicleLoad() &&
+                    !solver.getTotalTrafficForceHistory().empty()
+                    ? solver.getTotalTrafficForceHistory().back() : 0.0;
+
                 std::ostringstream oss;
                 oss << "【步骤 " << step + 1 << "/" << totalSteps << "】"
                     << " 时间=" << std::fixed << std::setprecision(1) << t / 3600.0 << "h"
-                    << " 融沉=" << std::scientific << settle << "m"
-                    << " 输出ID=" << outputStep;
+                    << " 融沉=" << std::scientific << settle << "m";
+                if (solver.isTrafficCouplingEnabled()) {
+                    oss << " 总动载=" << std::scientific << trafficForce << "N";
+                }
+                oss << " 输出ID=" << outputStep;
                 logMessage(oss.str());
                 ++outputStep;
             }
@@ -247,7 +303,8 @@ int main(int argc, char* argv[]) {
         writer.writeConvergenceLog(solver.getConvergenceLog(), "convergence_log.txt");
         writer.writeSettlementHistory(solver.getTimeHistory(),
                                        solver.getSettlementHistory(),
-                                       "settlement_history.txt");
+                                       "settlement_history.txt",
+                                       solver.getTotalTrafficForceHistory());
         logMessage("收敛日志与沉降历史已导出");
 
         if (!solver.getSettlementHistory().empty()) {

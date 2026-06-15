@@ -6,6 +6,7 @@ set(CORE_SOURCES
     VTKWriter.cpp
     Config.cpp
     BlockLoader.cpp
+    VehicleLoad.cpp
 )
 
 set(CORE_HEADERS
@@ -16,6 +17,7 @@ set(CORE_HEADERS
     ${CMAKE_SOURCE_DIR}/include/VTKWriter.h
     ${CMAKE_SOURCE_DIR}/include/Config.h
     ${CMAKE_SOURCE_DIR}/include/BlockLoader.h
+    ${CMAKE_SOURCE_DIR}/include/VehicleLoad.h
     ${CMAKE_SOURCE_DIR}/include/Types.h
 )
 

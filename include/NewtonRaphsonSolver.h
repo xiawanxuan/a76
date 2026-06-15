@@ -4,6 +4,7 @@
 #include "Assembler.h"
 #include "Mesh2D.h"
 #include "ThermoHydro.h"
+#include "VehicleLoad.h"
 #include <Eigen/IterativeLinearSolvers>
 #include <Eigen/SparseLU>
 #include <memory>
@@ -62,6 +63,31 @@ public:
 
     void setIterativeSolverTolerance(Scalar tol) { iterTol_ = tol; }
 
+    void enableTrafficCoupling(bool enable) { trafficCouplingEnabled_ = enable; }
+    bool isTrafficCouplingEnabled() const { return trafficCouplingEnabled_; }
+
+    void setVehicleLoad(std::shared_ptr<VehicleLoad> vehicleLoad) {
+        vehicleLoad_ = std::move(vehicleLoad);
+    }
+    VehicleLoad* getVehicleLoad() const { return vehicleLoad_.get(); }
+    bool hasVehicleLoad() const { return static_cast<bool>(vehicleLoad_); }
+
+    void setDynamicLoadFrequency(Scalar freqHz) { loadFrequencyHz_ = freqHz; }
+    Scalar getDynamicLoadFrequency() const { return loadFrequencyHz_; }
+
+    void setVehiclePositionFieldCallback(
+        std::function<void(Index, const VectorX&, const VectorX&)> cb) {
+        vehicleFieldCallback_ = std::move(cb);
+    }
+
+    const VectorX& getVehiclePositionField() const { return vehiclePosField_; }
+    const VectorX& getWheelPressureField() const { return wheelPressField_; }
+    const VectorX& getNodalTrafficLoad() const { return cachedNodalLoad_; }
+
+    const std::vector<Scalar>& getTotalTrafficForceHistory() const {
+        return trafficForceHistory_;
+    }
+
 private:
     void packStateVector(const VectorX& T, const VectorX& W,
                          const VectorX& UX, const VectorX& UY,
@@ -106,6 +132,18 @@ private:
 
     Eigen::SparseLU<SparseMatrixX> directSolver_;
     Eigen::BiCGSTAB<SparseMatrixX> iterativeSolver_;
+
+    bool trafficCouplingEnabled_ = false;
+    std::shared_ptr<VehicleLoad> vehicleLoad_ = nullptr;
+    Scalar loadFrequencyHz_ = 10.0;
+
+    VectorX vehiclePosField_;
+    VectorX wheelPressField_;
+    VectorX cachedNodalLoad_;
+
+    std::vector<Scalar> trafficForceHistory_;
+
+    std::function<void(Index, const VectorX&, const VectorX&)> vehicleFieldCallback_;
 };
 
 } // namespace RoadbedSim

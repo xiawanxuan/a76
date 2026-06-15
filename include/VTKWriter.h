@@ -24,14 +24,17 @@ public:
 
     void writeStep(Index stepIndex, Scalar time,
                    const FieldVariables& fields,
-                   const std::vector<Scalar>& elemDamage = {});
+                   const std::vector<Scalar>& elemDamage = {},
+                   const VectorX& vehiclePositionField = VectorX(),
+                   const VectorX& wheelPressureField = VectorX());
 
     void writeConvergenceLog(const ConvergenceLog& log,
                              const std::string& filename);
 
     void writeSettlementHistory(const std::vector<Scalar>& times,
                                 const std::vector<Scalar>& settlements,
-                                const std::string& filename);
+                                const std::string& filename,
+                                const std::vector<Scalar>& trafficForceHistory = {});
 
     void writeMeshOnly(const std::string& filename);
 
@@ -47,7 +50,8 @@ private:
     void writePoints(std::ofstream& ofs);
     void writeCells(std::ofstream& ofs);
     void writeCellData(std::ofstream& ofs, const std::vector<Scalar>& damage);
-    void writePointData(std::ofstream& ofs, const FieldVariables& fields);
+    void writePointData(std::ofstream& ofs, const FieldVariables& fields,
+                        const VectorX& vehiclePos, const VectorX& wheelPress);
 
     void writeScalarField(std::ofstream& ofs, const std::string& name,
                           const VectorX& field);

@@ -83,6 +83,20 @@ void Config::setupDescription() {
             "分块加载块大小")
         ("enable-block", value<bool>(&cfg_.enableBlockLoading)->default_value(true),
             "启用分块内存加载")
+        ("enable-traffic", value<bool>(&cfg_.enableTrafficCoupling)->default_value(false),
+            "启用车辆动荷载耦合")
+        ("vehicle-speed", value<Scalar>(&cfg_.vehicleSpeedKmh)->default_value(60.0),
+            "车辆行驶速度 (km/h)")
+        ("truck-count", value<Scalar>(&cfg_.truckCount)->default_value(50),
+            "仿真时段内卡车数量")
+        ("aadt", value<Scalar>(&cfg_.AADT_perLane)->default_value(20000),
+            "年均日交通量（每车道）")
+        ("truck-percent", value<Scalar>(&cfg_.truckPercent)->default_value(15.0),
+            "货车比例 (%)")
+        ("load-frequency", value<Scalar>(&cfg_.loadFrequencyHz)->default_value(10.0),
+            "动载等效频率 (Hz)")
+        ("headway", value<Scalar>(&cfg_.headway_s)->default_value(6.0),
+            "车队车头时距 (s)")
         ("summary,s", "打印配置摘要后退出")
     ;
 }
@@ -153,6 +167,26 @@ bool Config::loadFromFile(const std::string& filename) {
         cfg_.blockSize = pt.get("block_size", cfg_.blockSize);
         cfg_.enableBlockLoading = pt.get("enable_block_loading", cfg_.enableBlockLoading);
 
+        cfg_.enableTrafficCoupling = pt.get("enable_traffic_coupling", cfg_.enableTrafficCoupling);
+        cfg_.vehicleSpeedKmh = pt.get("vehicle_speed_kmh", cfg_.vehicleSpeedKmh);
+        cfg_.truckCount = pt.get("truck_count", cfg_.truckCount);
+        cfg_.lightCarCount = pt.get("light_car_count", cfg_.lightCarCount);
+        cfg_.AADT_perLane = pt.get("aadt_per_lane", cfg_.AADT_perLane);
+        cfg_.truckPercent = pt.get("truck_percent", cfg_.truckPercent);
+        cfg_.loadFrequencyHz = pt.get("load_frequency_hz", cfg_.loadFrequencyHz);
+        cfg_.useBZZ100Standard = pt.get("use_bzz100_standard", cfg_.useBZZ100Standard);
+        cfg_.startTime_s = pt.get("traffic_start_time_s", cfg_.startTime_s);
+        cfg_.trafficDuration_s = pt.get("traffic_duration_s", cfg_.trafficDuration_s);
+        cfg_.headway_s = pt.get("traffic_headway_s", cfg_.headway_s);
+        cfg_.surfaceElevation = pt.get("surface_elevation_m", cfg_.surfaceElevation);
+
+        if (auto lanes = pt.get_child_optional("lane_center_xs")) {
+            cfg_.laneCenterXs.clear();
+            for (const auto& [key, laneNode] : *lanes) {
+                cfg_.laneCenterXs.push_back(laneNode.get_value<Scalar>(0.0));
+            }
+        }
+
         if (auto zones = pt.get_child_optional("zones")) {
             for (const auto& [key, zoneNode] : *zones) {
                 Index zid = std::stoi(key);
@@ -215,6 +249,27 @@ bool Config::saveToFile(const std::string& filename) const {
         pt.put("block_size", cfg_.blockSize);
         pt.put("enable_block_loading", cfg_.enableBlockLoading);
 
+        pt.put("enable_traffic_coupling", cfg_.enableTrafficCoupling);
+        pt.put("vehicle_speed_kmh", cfg_.vehicleSpeedKmh);
+        pt.put("truck_count", cfg_.truckCount);
+        pt.put("light_car_count", cfg_.lightCarCount);
+        pt.put("aadt_per_lane", cfg_.AADT_perLane);
+        pt.put("truck_percent", cfg_.truckPercent);
+        pt.put("load_frequency_hz", cfg_.loadFrequencyHz);
+        pt.put("use_bzz100_standard", cfg_.useBZZ100Standard);
+        pt.put("traffic_start_time_s", cfg_.startTime_s);
+        pt.put("traffic_duration_s", cfg_.trafficDuration_s);
+        pt.put("traffic_headway_s", cfg_.headway_s);
+        pt.put("surface_elevation_m", cfg_.surfaceElevation);
+
+        boost::property_tree::ptree lanesNode;
+        for (size_t i = 0; i < cfg_.laneCenterXs.size(); ++i) {
+            boost::property_tree::ptree lNode;
+            lNode.put("", cfg_.laneCenterXs[i]);
+            lanesNode.push_back(std::make_pair(std::to_string(i), lNode));
+        }
+        pt.put_child("lane_center_xs", lanesNode);
+
         boost::property_tree::ptree zonesNode;
         for (const auto& [zid, p] : cfg_.customZones) {
             boost::property_tree::ptree zNode;
@@ -254,6 +309,17 @@ void Config::validate() const {
     if (cfg_.tolerance <= 0) {
         throw std::invalid_argument("收敛容差必须为正数");
     }
+    if (cfg_.enableTrafficCoupling) {
+        if (cfg_.vehicleSpeedKmh <= 0) {
+            throw std::invalid_argument("启用交通耦合时车速必须为正数");
+        }
+        if (cfg_.loadFrequencyHz <= 0) {
+            throw std::invalid_argument("动载频率必须为正数");
+        }
+        if (cfg_.laneCenterXs.empty()) {
+            throw std::invalid_argument("必须至少配置一个车道中心");
+        }
+    }
 }
 
 void Config::printSummary(std::ostream& os) const {
@@ -282,6 +348,22 @@ void Config::printSummary(std::ostream& os) const {
     os << "损伤阈值:       " << cfg_.damageThreshold << "\n";
     os << "分块加载:       " << (cfg_.enableBlockLoading ? "启用" : "禁用") << "\n";
     os << "分区数量:       " << cfg_.customZones.size() << "\n";
+    os << "----------------------------------------------\n";
+    os << "车辆动载耦合:   " << (cfg_.enableTrafficCoupling ? "启用" : "禁用") << "\n";
+    if (cfg_.enableTrafficCoupling) {
+        os << "车辆速度:       " << cfg_.vehicleSpeedKmh << " km/h\n";
+        os << "货车数:         " << cfg_.truckCount << " 辆, 小车数: "
+           << cfg_.lightCarCount << " 辆\n";
+        os << "AADT/车道:      " << cfg_.AADT_perLane << " 辆/日\n";
+        os << "货车比例:       " << cfg_.truckPercent << " %\n";
+        os << "动载频率:       " << cfg_.loadFrequencyHz << " Hz\n";
+        os << "车型标准:       " << (cfg_.useBZZ100Standard ? "BZZ-100" : "Custom") << "\n";
+        os << "车道中心:       [";
+        for (size_t i = 0; i < cfg_.laneCenterXs.size(); ++i) {
+            os << (i > 0 ? ", " : "") << cfg_.laneCenterXs[i];
+        }
+        os << "] m\n";
+    }
     os << "==============================================\n";
 }
 

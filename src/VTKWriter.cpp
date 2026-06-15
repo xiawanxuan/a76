@@ -124,7 +124,9 @@ void VTKWriter::writeVectorField(std::ofstream& ofs, const std::string& name,
     }
 }
 
-void VTKWriter::writePointData(std::ofstream& ofs, const FieldVariables& fields) {
+void VTKWriter::writePointData(std::ofstream& ofs, const FieldVariables& fields,
+                                const VectorX& vehiclePos,
+                                const VectorX& wheelPress) {
     const Index numNodes = mesh_.getNumNodes();
     ofs << "POINT_DATA " << numNodes << "\n";
 
@@ -163,11 +165,16 @@ void VTKWriter::writePointData(std::ofstream& ofs, const FieldVariables& fields)
         }
         writeScalarField(ofs, "FrozenState", freezeState);
     }
+
+    writeScalarField(ofs, "VehiclePosition", vehiclePos);
+    writeScalarField(ofs, "WheelPressure_Pa", wheelPress);
 }
 
 void VTKWriter::writeStep(Index stepIndex, Scalar time,
                            const FieldVariables& fields,
-                           const std::vector<Scalar>& elemDamage) {
+                           const std::vector<Scalar>& elemDamage,
+                           const VectorX& vehiclePositionField,
+                           const VectorX& wheelPressureField) {
     ensureOutputDirectory();
     std::string filename = outputDir_ + "/" + formatStepFilename("roadbed", stepIndex);
     std::ofstream ofs(filename);
@@ -179,7 +186,7 @@ void VTKWriter::writeStep(Index stepIndex, Scalar time,
     writePoints(ofs);
     writeCells(ofs);
     writeCellData(ofs, elemDamage);
-    writePointData(ofs, fields);
+    writePointData(ofs, fields, vehiclePositionField, wheelPressureField);
 
     ofs.close();
 }
@@ -202,13 +209,22 @@ void VTKWriter::writeConvergenceLog(const ConvergenceLog& log,
 
 void VTKWriter::writeSettlementHistory(const std::vector<Scalar>& times,
                                         const std::vector<Scalar>& settlements,
-                                        const std::string& filename) {
+                                        const std::string& filename,
+                                        const std::vector<Scalar>& trafficForceHistory) {
     std::ofstream ofs(outputDir_ + "/" + filename);
     ofs << std::setprecision(precision_) << std::scientific;
-    ofs << "# Time_s Settlement_m\n";
-    Index N = std::min(times.size(), settlements.size());
-    for (Index i = 0; i < N; ++i) {
-        ofs << times[i] << " " << settlements[i] << "\n";
+    if (trafficForceHistory.empty()) {
+        ofs << "# Time_s Settlement_m\n";
+        Index N = std::min(times.size(), settlements.size());
+        for (Index i = 0; i < N; ++i) {
+            ofs << times[i] << " " << settlements[i] << "\n";
+        }
+    } else {
+        ofs << "# Time_s Settlement_m TotalTrafficForce_N\n";
+        Index N = std::min({times.size(), settlements.size(), trafficForceHistory.size()});
+        for (Index i = 0; i < N; ++i) {
+            ofs << times[i] << " " << settlements[i] << " " << trafficForceHistory[i] << "\n";
+        }
     }
     ofs.close();
 }
@@ -223,6 +239,16 @@ void VTKWriter::writeMeshOnly(const std::string& filename) {
     writePoints(ofs);
     writeCells(ofs);
     writeCellData(ofs, {});
+    FieldVariables emptyFields;
+    emptyFields.temperature = VectorX::Zero(mesh_.getNumNodes());
+    emptyFields.waterContent = VectorX::Zero(mesh_.getNumNodes());
+    emptyFields.iceContent = VectorX::Zero(mesh_.getNumNodes());
+    emptyFields.displaceX = VectorX::Zero(mesh_.getNumNodes());
+    emptyFields.displaceY = VectorX::Zero(mesh_.getNumNodes());
+    emptyFields.stressXX = VectorX::Zero(mesh_.getNumNodes());
+    emptyFields.stressYY = VectorX::Zero(mesh_.getNumNodes());
+    emptyFields.stressXY = VectorX::Zero(mesh_.getNumNodes());
+    writePointData(ofs, emptyFields, VectorX(), VectorX());
     ofs.close();
 }
 

@@ -12,6 +12,7 @@ set(TEST_FILES
     test_solver.cpp
     test_vtkwriter.cpp
     test_config.cpp
+    test_vehicleload.cpp
 )
 
 set(TEST_DATA_DIR ${CMAKE_SOURCE_DIR}/examples)
