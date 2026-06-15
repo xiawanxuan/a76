@@ -2,6 +2,19 @@
 
 namespace RoadbedSim {
 
+namespace {
+inline Scalar sanitizeScalar(Scalar val, Scalar fallback = 0.0) {
+    if (!std::isfinite(val)) {
+        return fallback;
+    }
+    constexpr Scalar MIN_ABS_DISP = 1e-12;
+    if (std::abs(val) < MIN_ABS_DISP && val != 0.0) {
+        return 0.0;
+    }
+    return val;
+}
+}
+
 VTKWriter::VTKWriter(const Mesh2D& mesh) : mesh_(mesh) {
     ensureOutputDirectory();
 }
@@ -40,7 +53,10 @@ void VTKWriter::writePoints(std::ofstream& ofs) {
     const auto& nodes = mesh_.getNodes();
     ofs << "POINTS " << nodes.size() << " double\n";
     for (const auto& n : nodes) {
-        ofs << n.x << " " << n.y << " 0.0\n";
+        Scalar sx = sanitizeScalar(n.x, 0.0);
+        Scalar sy = sanitizeScalar(n.y, 0.0);
+        ofs << std::setprecision(precision_) << std::scientific
+            << sx << " " << sy << " " << 0.0 << "\n";
     }
 }
 
@@ -65,7 +81,8 @@ void VTKWriter::writeCellData(std::ofstream& ofs, const std::vector<Scalar>& dam
         ofs << "SCALARS FreezeThawDamage double 1\n";
         ofs << "LOOKUP_TABLE default\n";
         for (Scalar d : damage) {
-            ofs << d << "\n";
+            Scalar sd = sanitizeScalar(d, 0.0);
+            ofs << std::setprecision(precision_) << std::scientific << sd << "\n";
         }
         ofs << "SCALARS ZoneID int 1\n";
         ofs << "LOOKUP_TABLE default\n";
@@ -83,53 +100,68 @@ void VTKWriter::writeCellData(std::ofstream& ofs, const std::vector<Scalar>& dam
 
 void VTKWriter::writeScalarField(std::ofstream& ofs, const std::string& name,
                                   const VectorX& field) {
+    const Index numNodes = mesh_.getNumNodes();
     ofs << "SCALARS " << name << " double 1\n";
     ofs << "LOOKUP_TABLE default\n";
-    for (Index i = 0; i < field.size(); ++i) {
-        ofs << field(i) << "\n";
+    for (Index i = 0; i < numNodes; ++i) {
+        Scalar val = (i < field.size()) ? field(i) : 0.0;
+        val = sanitizeScalar(val, 0.0);
+        ofs << std::setprecision(precision_) << std::scientific << val << "\n";
     }
 }
 
 void VTKWriter::writeVectorField(std::ofstream& ofs, const std::string& name,
                                   const VectorX& fieldX, const VectorX& fieldY) {
+    const Index numNodes = mesh_.getNumNodes();
     ofs << "VECTORS " << name << " double\n";
-    Index N = std::min(fieldX.size(), fieldY.size());
-    for (Index i = 0; i < N; ++i) {
-        ofs << fieldX(i) << " " << fieldY(i) << " 0.0\n";
+    for (Index i = 0; i < numNodes; ++i) {
+        Scalar vx = (i < fieldX.size()) ? fieldX(i) : 0.0;
+        Scalar vy = (i < fieldY.size()) ? fieldY(i) : 0.0;
+        vx = sanitizeScalar(vx, 0.0);
+        vy = sanitizeScalar(vy, 0.0);
+        ofs << std::setprecision(precision_) << std::scientific
+            << vx << " " << vy << " " << 0.0 << "\n";
     }
 }
 
 void VTKWriter::writePointData(std::ofstream& ofs, const FieldVariables& fields) {
-    Index N = mesh_.getNumNodes();
-    ofs << "POINT_DATA " << N << "\n";
+    const Index numNodes = mesh_.getNumNodes();
+    ofs << "POINT_DATA " << numNodes << "\n";
 
-    if (fields.temperature.size() == N)
-        writeScalarField(ofs, "Temperature_K", fields.temperature);
+    writeScalarField(ofs, "Temperature_K", fields.temperature);
+    writeScalarField(ofs, "WaterContent", fields.waterContent);
+    writeScalarField(ofs, "IceContent", fields.iceContent);
+    writeVectorField(ofs, "Displacement_m", fields.displaceX, fields.displaceY);
 
-    if (fields.waterContent.size() == N)
-        writeScalarField(ofs, "WaterContent", fields.waterContent);
-
-    if (fields.iceContent.size() == N)
-        writeScalarField(ofs, "IceContent", fields.iceContent);
-
-    if (fields.displaceX.size() == N && fields.displaceY.size() == N)
-        writeVectorField(ofs, "Displacement_m", fields.displaceX, fields.displaceY);
-
-    if (fields.displaceY.size() == N) {
-        VectorX settlement = -fields.displaceY;
+    {
+        VectorX settlement(numNodes);
+        for (Index i = 0; i < numNodes; ++i) {
+            Scalar dy = (i < fields.displaceY.size()) ? fields.displaceY(i) : 0.0;
+            settlement(i) = sanitizeScalar(-dy, 0.0);
+        }
         writeScalarField(ofs, "Settlement_m", settlement);
     }
 
-    if (fields.stressXX.size() == N)
-        writeScalarField(ofs, "Stress_XX_Pa", fields.stressXX);
-    if (fields.stressYY.size() == N)
-        writeScalarField(ofs, "Stress_YY_Pa", fields.stressYY);
-    if (fields.stressXY.size() == N)
-        writeScalarField(ofs, "Stress_XY_Pa", fields.stressXY);
+    writeScalarField(ofs, "Stress_XX_Pa", fields.stressXX);
+    writeScalarField(ofs, "Stress_YY_Pa", fields.stressYY);
+    writeScalarField(ofs, "Stress_XY_Pa", fields.stressXY);
 
-    if (fields.temperature.size() == N) {
-        VectorX tempC = fields.temperature.array() - FREEZING_POINT;
+    {
+        VectorX tempC(numNodes);
+        for (Index i = 0; i < numNodes; ++i) {
+            Scalar tk = (i < fields.temperature.size()) ? fields.temperature(i) : FREEZING_POINT;
+            tempC(i) = sanitizeScalar(tk - FREEZING_POINT, 0.0);
+        }
         writeScalarField(ofs, "Temperature_C", tempC);
+    }
+
+    {
+        VectorX freezeState(numNodes);
+        for (Index i = 0; i < numNodes; ++i) {
+            Scalar tk = (i < fields.temperature.size()) ? fields.temperature(i) : FREEZING_POINT;
+            freezeState(i) = (tk < FREEZING_POINT - 0.5) ? 1.0 : 0.0;
+        }
+        writeScalarField(ofs, "FrozenState", freezeState);
     }
 }
 
